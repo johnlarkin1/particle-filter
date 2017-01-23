@@ -8,14 +8,14 @@ DEG = np.pi / 180
 FT = 0.3048
 
 # Number of objects
-NUM_OF_RAYS = 32
+NUM_OF_RAYS = 8
 NUM_OF_PARTICLES = 24
 
 # How wide should we look?
 DEG_SPAN = 30*DEG
 
 # Errors
-SIGMA_XY = 0.15
+SIGMA_XY = 0.25
 SIGMA_THETA = 0.01
 SIGMA_Z = 0.25
 
@@ -90,6 +90,7 @@ SHORT_PATH_COMMANDS = [
 	'forward',
 ]
 
+# This just plots a line segment
 def plot_segment(p0, p1):
 
     x0, y0 = p0
@@ -97,6 +98,7 @@ def plot_segment(p0, p1):
     
     plt.plot([x0, x1], [y0, y1], 'b')
 
+# This plots our actual robot as a circle
 def plot_robot(x, y, theta):
 
     dx = 0.2*np.cos(theta)
@@ -105,6 +107,7 @@ def plot_robot(x, y, theta):
     plt.gca().add_artist(plt.Circle((x, y), 0.15, color='g'))
     plt.plot([x, x+dx], [y, y+dy], color='k')
 
+# This plots a ray
 def plot_ray(x, y, angle, distance):
 
     dx = distance*np.cos(angle)
@@ -112,6 +115,7 @@ def plot_ray(x, y, angle, distance):
 
     plt.plot([x, x+dx], [y, y+dy], color='g')
 
+# This initializes our class
 def pseudo_initialization():
 	robot_pose = help.CurrPose(0, 0, 0)
 	kinect_pose = robot_pose
@@ -121,9 +125,10 @@ def pseudo_initialization():
 
 	particles = np.zeros((3, NUM_OF_PARTICLES))
 
-
 	width = 4
 	height = 6
+
+	# Scattering our points
 	x_coords = np.linspace(0, (width-1.5), NUM_OF_PARTICLES/height)
 	x_coords = np.append(x_coords, [x_coords]*(height-1))
 
@@ -136,58 +141,51 @@ def pseudo_initialization():
 		 y_coords, \
 		 theta_coords] )
 
-
-	# particles = np.array(\
-	# 	[np.linspace(0, 4, NUM_OF_PARTICLES), \
-	# 	 np.linspace(0, 6, NUM_OF_PARTICLES), \
-	# 	 np.linspace(-180*DEG, 180*DEG, NUM_OF_PARTICLES) ] )
+	# need this guy to latch on
+	particles[:,0] = np.array([0,0,0])
 
 	weights = np.ones((NUM_OF_PARTICLES)) 
 
 	return (angles_to_use, particles, weights)
 
-def interpret_control(particles, control, noise, thetanoise):
+# This is our motion update.
+def motion_update(particles, control, sigma_xy, sigma_theta):
+	nparticles = particles.shape[1]
+	noisex = np.random.normal(scale = sigma_xy, size = nparticles)
+	noisey = np.random.normal(scale = sigma_xy, size = nparticles)
+	thetanoise = np.random.normal(scale = sigma_theta, size = nparticles)
 	if control == "forward":
-		particles[0,:] += 3 * FT * np.cos(particles[2,:]) + noise
-		particles[1,:] += 3 * FT * np.sin(particles[2,:]) + noise
+		particles[0,:] += 3 * FT * np.cos(particles[2,:]) + noisex
+		particles[1,:] += 3 * FT * np.sin(particles[2,:]) + noisey
 		particles[2,:] += thetanoise
 	elif control == "backward":
-		particles[0,:] -= 3 * FT * np.cos(particles[2,:]) + noise
-		particles[1,:] -= 3 * FT * np.sin(particles[2,:]) + noise
+		particles[0,:] -= 3 * FT * np.cos(particles[2,:]) + noisex
+		particles[1,:] -= 3 * FT * np.sin(particles[2,:]) + noisey
 		particles[2,:] += thetanoise
 	elif control == "turnleft":
-		particles[0,:] += noise
-		particles[1,:] += noise
+		particles[0,:] += noisex
+		particles[1,:] += noisey
 		particles[2,:] += 90*DEG + thetanoise
 	elif control == "turnright":
-		particles[0,:] += noise
-		particles[1,:] += noise
+		particles[0,:] += noisex
+		particles[1,:] += noisey
 		particles[2,:] -= 90*DEG + thetanoise
 	return particles
 
-def motion_update(particles, control, sigma_xy, sigma_theta):
-	nparticles = particles.shape[1]
-	noise = np.random.normal(scale = sigma_xy, size = nparticles)
-	thetanoise = np.random.normal(scale = sigma_theta, size = nparticles)
-	particles = interpret_control(particles, control, noise, thetanoise)
-	return particles
-
+# This reads our data in
 def read_measurements(input_file):
 	line = input_file.readline()
 	line = line.split()
 	measurement = map(float, line)
 	return measurement
 
+# This is our measurement update
 def measurement_update(particles, measured_distances):
-	# read in our measured distances
-	z =  [ np.nan,  np.nan,  np.nan,  np.nan,  np.nan, 1.27337121964, \
-		1.38065111637, 2.37722682953, 2.3681435585, 2.36376786232,\
-		2.36085796356, 2.37680268288, 2.36462903023, 2.33905148506,\
-		2.33231401443, 2.32829260826, 2.34300112724, 2.3284444809,\
-		2.3486559391,  np.nan, 2.3496940136, 2.37831878662, 2.33097696304,\
-		1.98269820213,1.7386392355, np.nan,1.3323802948,1.22445964813,\
-		1.11974823475,1.02566063404,0.958425998688, np.nan]
+	# read in our measured distances, just entering this in manually
+	z = measured_distances
 
+	# This is so we can alter how many rays we actually want to use
+	z = z[::len(z)/NUM_OF_RAYS]
 	nan_location = np.isnan(z)
 
 	weights = np.ones(NUM_OF_PARTICLES)
@@ -195,14 +193,16 @@ def measurement_update(particles, measured_distances):
 
 	for particle_index in range(nparticles):
 		expected_distances = help.expected_ranges(particles[:,particle_index], angles_to_use, WALL_SEGS)
-		expected_dist= np.array(expected_distances)
+		expected_dist = np.array(expected_distances)
+
 		for ray_index, val in enumerate(nan_location):
 			if val:
 				weights[particle_index] = weights[particle_index]
 			else:
 				weights[particle_index] = weights[particle_index] * np.exp(-( ( (z[ray_index]-expected_dist[ray_index])**2 ) / (2*SIGMA_Z**2) ) )
 
-	weights = weights/ (np.sum(weights))
+	# Need to normalize our weights
+	weights = weights / (np.sum(weights))
 
 	particles_to_use = np.linspace(0, nparticles - 1, num = nparticles)
 	indices = np.random.choice(particles_to_use, size = nparticles, p = weights)
@@ -269,6 +269,9 @@ if __name__ == "__main__":
 
 		plot_particles(particles)
 		plot_robot(0, 0, 0)
+		plt.xlabel('X Coordinates')
+		plt.ylabel('Y Coordinates')
+		plt.title('Original Starting Position')
 		plt.axis('equal')
 		plt.show()
 
@@ -282,18 +285,31 @@ if __name__ == "__main__":
 
 			plot_particles(particles)
 
+			plot_robot_path(SHORT_ROBOT_PATH, i)
+
+			plt.xlabel('X Coordinates')
+			plt.ylabel('Y Coordinates')
+			plt.title('Iteration {}: After Motion Update'.format(i))
+			plt.axis('equal')
+			plt.show()
+
 			# Measurement Update
 			measured_distances = read_measurements(measure_file)
 
-			particles = measurement_update(particles, measured_distances)
+			for seg in WALL_SEGS:
+				p0, p1 = seg
+				plot_segment(p0, p1)
+			
+			if i != 9:
+				particles = measurement_update(particles, measured_distances)
 
 			plot_particles(particles)
 
 			plot_robot_path(SHORT_ROBOT_PATH, i)
-			# plt.figure(str(i))
-			plt.xlabel('Particle location')
-			plt.ylabel('Iteration')
-			plt.title('Particle filter results')
+			
+			plt.xlabel('X Coordinates')
+			plt.ylabel('Y Coordinates')
+			plt.title('Iteration {}: After Measurement Update'.format(i))
 			plt.axis('equal')
 			plt.show()
 
