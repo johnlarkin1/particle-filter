@@ -1,8 +1,9 @@
 import numpy as np
 
-
+# Conversion from foot to meter
 FT = 0.3048 
 
+# These are our wall segments in the world with our given maze
 WALL_SEGS = [
         [(-0.5 * 3 * FT, -0.5 * 3 * FT), (3* FT * -0.5,  5.5*FT * 3 )],
         [(-0.5 * 3 * FT, -0.5 * 3 * FT), (3* FT *  3.5, -0.5*FT * 3 )],
@@ -19,13 +20,16 @@ WALL_SEGS = [
         [( 1.5 * 3 * FT,  4.5 * 3 * FT), (3* FT *  2.5,  4.5*FT * 3 )]
    ]
 
-
+# This is just going to hold the current pose of the robot. 
+# Very similar to how ROS lays it out.
 class CurrPose:
 	def __init__(self, x = None, y = None, theta = None):
 		self.x = x
 		self.y = y
 		self.theta = theta
 
+# This is a ray. It's essentially just an origin and a direction. 
+# Origin is a point and then director *should* be a vector.
 class Ray:
     def __init__(self, origin = None, direction = None):
         self.origin = origin
@@ -42,6 +46,7 @@ class Wall_Segment:
         self.ending_pt = ending_pt
         self.segment_vec = ending_pt - starting_pt
 
+# Again, let's define a R^2 vector. 
 class vec2:
     # Initialization
     def __init__(self, x, y):
@@ -81,46 +86,50 @@ class vec2:
         length = self.length()
         return vec2(self.x/length, self.y/length)
 
+# Let's define our own vec3 class for 
 class vec3:
-        def __init__(self, x, y, z):
-                # Can set multiple things on one line; see this link http://openbookproject.net/thinkcs/python/english3e/tuples.html
-                (self.x, self.y, self.z) = (x, y, z)
-        # Adding with vectors
-        def __add__(self, other):
-                return vec3(self.x + other.x, self.y + other.y, self.z + other.z)
-        # Subtracting with vectors
-        def __sub__(self, other):
-                return vec3(self.x - other.x, self.y - other.y, self.z - other.z )
-        # Division with a scalar
-        def __div__(self, other):
-                return vec3(self.x / other, self.y / other, self.z / other)
-        # Multiplication with a scalar
-        def __mul__(self, other):
-                return vec3(self.x * other, self.y * other, self.z * other)
-        # let's make sure we can have multiplication either way
-        __rmul__ = __mul__
-        # Dot product 
-        def dot(self, other):
-                # this should return a scalar
-                return (self.x * other.x) + (self.y * other.y) + (self.z * other.z)
-        def length(self):
-        # Length or magnitude of the vector
-                return (self.x**2 + self.y**2 + self.z**2)**(1.0/2.0)
-        # Cross product. Tells the orthogonal vector. 
-        def cross(self, other):
-                # This is just going to be the formula for 3 dimensions; x product returns a normal that is pointing in the opposite direction
-                # this is also going to be a x b
-                return vec3(self.y*other.z - self.z * other.y, self.z * other.x - self.x * other.y, self.x * other.y - self.y * other.x)
-        def normalize(self):
-                length = self.length()
-                self.x /= length
-                self.y /= length
-                self.z /= length
-        def normal(self):
-                length = self.length()
-                return vec3(self.x/length, self.y / length, self.z / length)
-        def componenets(self):
-                return (self.x, self.y, self.z)
+    def __init__(self, x, y, z):
+        # Can set multiple things on one line; see this link http://openbookproject.net/thinkcs/python/english3e/tuples.html
+        (self.x, self.y, self.z) = (x, y, z)
+    # Adding with vectors
+    def __add__(self, other):
+        return vec3(self.x + other.x, self.y + other.y, self.z + other.z)
+    # Subtracting with vectors
+    def __sub__(self, other):
+        return vec3(self.x - other.x, self.y - other.y, self.z - other.z )
+    # Division with a scalar
+    def __div__(self, other):
+        return vec3(self.x / other, self.y / other, self.z / other)
+    # Multiplication with a scalar
+    def __mul__(self, other):
+        return vec3(self.x * other, self.y * other, self.z * other)
+    # let's make sure we can have multiplication either way
+    __rmul__ = __mul__
+    # Dot product 
+    def dot(self, other):
+        # this should return a scalar
+        return (self.x * other.x) + (self.y * other.y) + (self.z * other.z)
+    def length(self):
+    # Length or magnitude of the vector
+        return (self.x**2 + self.y**2 + self.z**2)**(1.0/2.0)
+    # Cross product. Tells the orthogonal vector. 
+    def cross(self, other):
+        # This is just going to be the formula for 3 dimensions; x product returns a normal that is pointing in the opposite direction
+        # this is also going to be a x b
+        return vec3(self.y*other.z - self.z * other.y, self.z * other.x - self.x * other.y, self.x * other.y - self.y * other.x)
+    def normalize(self):
+        length = self.length()
+        self.x /= length
+        self.y /= length
+        self.z /= length
+    def normal(self):
+        length = self.length()
+        return vec3(self.x/length, self.y / length, self.z / length)
+    def componenets(self):
+        return (self.x, self.y, self.z)
+
+# Find the minimum distance to the walls.
+# This is really what we care about.
 
 def expected_ranges(kinect_pose, angles, walls):
     ray = Ray()
@@ -145,6 +154,8 @@ def expected_ranges(kinect_pose, angles, walls):
     
     return distance_exp
     
+
+# See https://johnlarkin1.github.io or any other google article about this
 
 def find_xsection_bn_seg_and_ray(ray, wall_segment):
     p0 = ray.origin
@@ -172,6 +183,8 @@ def find_xsection_bn_seg_and_ray(ray, wall_segment):
         return alpha # this is the distance to our hit point
 
 
+# This is the old way of doing things!! It's not relavent - it just didn't work as cleanly 
+# as the above example
 def find_xsection_bn_seg_and_ray_old(ray, wall_segment):
     start_pt = wall_segment[0]
     end_pt = wall_segment[1]

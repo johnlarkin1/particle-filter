@@ -8,7 +8,8 @@ DEG = np.pi / 180
 FT = 0.3048
 
 # Number of objects
-NUM_OF_RAYS = 8
+# CHANGE THESE FOR INTERESTING AFFECTS
+NUM_OF_RAYS = 8 # NOTE: 32 must be divisible by this number!!
 NUM_OF_PARTICLES = 24
 
 # How wide should we look?
@@ -19,6 +20,7 @@ SIGMA_XY = 0.25
 SIGMA_THETA = 0.01
 SIGMA_Z = 0.25
 
+# Wall segments in the world
 WALL_SEGS = [
         [(-0.5 * 3 * FT, -0.5 * 3 * FT), (3* FT * -0.5,  5.5*FT * 3 )],
         [(-0.5 * 3 * FT, -0.5 * 3 * FT), (3* FT *  3.5, -0.5*FT * 3 )],
@@ -35,21 +37,7 @@ WALL_SEGS = [
         [( 1.5 * 3 * FT,  4.5 * 3 * FT), (3* FT *  2.5,  4.5*FT * 3 )]
    ]
 
-ROBOT_PATH = [
-	(0, 0, 90*DEG),
-	(0, 1, 90*DEG), 
-	(0, 2, 90*DEG), 
-	(0, 2, 0), 
-	(1, 2, 0),
-	(1, 2, -90*DEG),
-	(1, 1, -90*DEG), 
-	(1, 1, 0), 
-	(2, 1, 0), 
-	(3, 1, 0),
-	(3, 1, -90*DEG), 
-	(3, 0, -90*DEG)
-]
-
+# Instructed robot path
 SHORT_ROBOT_PATH = [
 	(0, 0, 90*DEG),
 	(0, 1, 90*DEG), 
@@ -63,20 +51,7 @@ SHORT_ROBOT_PATH = [
 	(3, 1, 0),
 ]
 
-PATH_COMMANDS = [
-	'forward',
-	'forward',
-	'turnright',
-	'forward',
-	'turnright',
-	'forward',
-	'turnleft',
-	'forward',
-	'forward',
-	'turnright', 
-	'forward'
-]
-
+# Instructed robot commands that we fed in
 SHORT_PATH_COMMANDS = [
 	'turnleft',
 	'forward',
@@ -117,16 +92,21 @@ def plot_ray(x, y, angle, distance):
 
 # This initializes our class
 def pseudo_initialization():
+	# Initially this is the orientation of the robot
 	robot_pose = help.CurrPose(0, 0, 0)
 	kinect_pose = robot_pose
 
+	# Let's split up our angles to use into the number of rays that we have
 	angles_to_use = np.linspace(-DEG_SPAN, DEG_SPAN, NUM_OF_RAYS)
+
+	# convert this to a list 
 	angles_to_use = angles_to_use.tolist()
 
+	# this is a 3 x n matrix where each column represents a particle
 	particles = np.zeros((3, NUM_OF_PARTICLES))
 
-	width = 4
-	height = 6
+	# Height and width of our maze
+	width, height = 4, 6
 
 	# Scattering our points
 	x_coords = np.linspace(0, (width-1.5), NUM_OF_PARTICLES/height)
@@ -141,7 +121,7 @@ def pseudo_initialization():
 		 y_coords, \
 		 theta_coords] )
 
-	# need this guy to latch on
+	# need this guy to latch on! otherwise, it probably won't pick it up
 	particles[:,0] = np.array([0,0,0])
 
 	weights = np.ones((NUM_OF_PARTICLES)) 
@@ -150,10 +130,10 @@ def pseudo_initialization():
 
 # This is our motion update.
 def motion_update(particles, control, sigma_xy, sigma_theta):
-	nparticles = particles.shape[1]
-	noisex = np.random.normal(scale = sigma_xy, size = nparticles)
-	noisey = np.random.normal(scale = sigma_xy, size = nparticles)
-	thetanoise = np.random.normal(scale = sigma_theta, size = nparticles)
+	nparticles = particles.shape[1] # how many particles do we have
+	noisex = np.random.normal(scale = sigma_xy, size = nparticles) # noise for x
+	noisey = np.random.normal(scale = sigma_xy, size = nparticles) # noise for y
+	thetanoise = np.random.normal(scale = sigma_theta, size = nparticles) # noise for theta
 	if control == "forward":
 		particles[0,:] += 3 * FT * np.cos(particles[2,:]) + noisex
 		particles[1,:] += 3 * FT * np.sin(particles[2,:]) + noisey
@@ -188,13 +168,18 @@ def measurement_update(particles, measured_distances):
 	z = z[::len(z)/NUM_OF_RAYS]
 	nan_location = np.isnan(z)
 
+	# our weights should all be the same to start
 	weights = np.ones(NUM_OF_PARTICLES)
+
+	# again, get the number of particles... could also use a our global variable
 	nparticles = particles.shape[1]
 
+	# ok so here let's iterate over the particles
 	for particle_index in range(nparticles):
 		expected_distances = help.expected_ranges(particles[:,particle_index], angles_to_use, WALL_SEGS)
 		expected_dist = np.array(expected_distances)
 
+		# then we need to iterate over each ray that the particle we're on has seen and compare to the prior 
 		for ray_index, val in enumerate(nan_location):
 			if val:
 				weights[particle_index] = weights[particle_index]
@@ -204,14 +189,19 @@ def measurement_update(particles, measured_distances):
 	# Need to normalize our weights
 	weights = weights / (np.sum(weights))
 
+	# these are the particles that we're going to pick from
 	particles_to_use = np.linspace(0, nparticles - 1, num = nparticles)
+
+	# get the indices of the surviving particles
 	indices = np.random.choice(particles_to_use, size = nparticles, p = weights)
 	indices = indices.astype(int)
 
+	# select the right particles
 	particles = particles[:,indices]
 
 	return particles
 
+# Read in the x, y, and theta positions
 def read_particle_locations(input_file):
 	x_positions = input_file.readline()
 	y_positions = input_file.readline()
@@ -231,6 +221,7 @@ def read_particle_locations(input_file):
 		theta_positions])
 	return curr_postions
 
+# Plot our individual particles
 def plot_particles(particle_matrix):
 	for idx in range(particle_matrix.shape[1]):
 		x = particle_matrix[0,idx]
@@ -245,6 +236,7 @@ def plot_particles(particle_matrix):
 		plt.gca().add_artist(plt.Circle((x, y), 0.05, color='#ff1493'))
 		plt.plot([x, x+dx], [y, y+dy], color='#8a2be2')
 
+# Plot the path of the robot. This jumps into the SHORT_ROBOT_PATH
 def plot_robot_path(robot_paths, i):
 	position = robot_paths[i]
 	plot_robot(position[0], position[1], position[2])
